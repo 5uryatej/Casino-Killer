@@ -53,9 +53,16 @@ def is_blackjack(cards: list[str]) -> bool:
     return len(cards) == 2 and total == 21
 
 
-def dealer_should_hit(cards: list[str]) -> bool:
+def dealer_should_hit(cards: list[str], hit_soft_17: bool) -> bool:
     total, soft = hand_value(cards)
-    return total < 17 or (total == 17 and soft)
+
+    if total < 17:
+        return True
+
+    if total == 17 and soft and hit_soft_17:
+        return True
+
+    return False
 
 
 def recommend_action(player_cards: list[str], dealer_upcard: str) -> str:
@@ -159,15 +166,48 @@ class BlackjackTracker:
 
     def estimated_player_edge(self) -> float:
         return BASE_PLAYER_EDGE + EDGE_PER_TRUE_COUNT * self.true_count()
-
+    
     def recommended_bet(self, table_min: float, table_max: float) -> float:
-        edge = self.estimated_player_edge()
-        if edge <= 0:
-            return table_min
+        tc = self.true_count()
 
-        bet_fraction = (edge / HAND_VARIANCE_UNITS) * KELLY_FRACTION
-        raw_bet = self.bankroll * bet_fraction
-        return max(table_min, min(table_max, raw_bet))
+        if tc <= 0:
+            multiplier = 1
+        elif tc < 1:
+            multiplier = 2
+        elif tc < 2:
+            multiplier = 4
+        elif tc < 3:
+            multiplier = 6
+        elif tc < 4:
+            multiplier = 8
+        elif tc < 5:
+            multiplier = 10
+        elif tc < 6:
+            multiplier = 12
+        elif tc < 7:
+            multiplier = 15
+        else:
+            multiplier = 20
+
+        suggested_bet = table_min * multiplier
+
+        return min(table_max, suggested_bet)
+    # def recommended_bet(self, table_min: float, table_max: float) -> float:
+    #     tc = self.true_count()
+
+    #     if tc <= 0:
+    #         suggested_bet = table_min
+    #     elif tc < 1:
+    #         suggested_bet = table_min * 2
+    #     elif tc < 2:
+    #         suggested_bet = table_min * 4
+    #     elif tc < 3:
+    #         suggested_bet = table_min * 6
+    #     else:
+    #         suggested_bet = table_min * 8
+
+    #     return min(table_max, suggested_bet)
+        
 
     def estimated_next_hand_win_prob(self) -> float:
         tc = self.true_count()
@@ -240,7 +280,28 @@ def prompt_card(label: str, tracker: BlackjackTracker) -> str:
         except ValueError as e:
             print(f"Error: {e}")
 
+def prompt_hidden_card(label: str, tracker: BlackjackTracker) -> str:
+    while True:
+        try:
+            c = normalize_card(input(label).strip())
 
+            if tracker.remaining[c] <= 0:
+                raise ValueError(f"No {c} cards left in the deck.")
+
+            # Remove physically from shoe
+            tracker.remaining[c] -= 1
+
+            # DO NOT add to seen count yet
+            return c
+
+        except ValueError as e:
+            print(f"Error: {e}")
+
+
+def reveal_hidden_card(tracker: BlackjackTracker, card: str) -> None:
+    # Now the card becomes visible to the player/count
+    tracker.seen.append(card)
+    
 def settle_bankroll(tracker: BlackjackTracker, result: str, bet: float) -> None:
     if result == "PLAYER WIN":
         tracker.bankroll += bet
@@ -256,7 +317,8 @@ def settle_bankroll(tracker: BlackjackTracker, result: str, bet: float) -> None:
         tracker.bankroll -= bet
 
 
-def play_round(tracker: BlackjackTracker, table_min: float, table_max: float) -> None:
+def play_round(tracker: BlackjackTracker, table_min: float, table_max: float, hit_soft_17: bool) -> None:
+    
     tracker.round_no += 1
     bet = tracker.recommended_bet(table_min, table_max)
 
@@ -266,6 +328,7 @@ def play_round(tracker: BlackjackTracker, table_min: float, table_max: float) ->
 
     player: list[str] = []
     dealer: list[str] = []
+    dealer_hole = None
 
     p1 = prompt_card("Player first card: ", tracker)
     d_up = prompt_card("Dealer upcard: ", tracker)
@@ -273,6 +336,28 @@ def play_round(tracker: BlackjackTracker, table_min: float, table_max: float) ->
 
     player.extend([p1, p2])
     dealer.append(d_up)
+
+    if d_up in {"A", "10", "J", "Q", "K"}:
+        print("\nDealer checks for blackjack...")
+
+        dealer_hole = prompt_hidden_card("Dealer hole card: ", tracker)
+        dealer.append(dealer_hole)
+
+    if is_blackjack(dealer):
+        reveal_hidden_card(tracker, dealer_hole)
+        print(f"Dealer has blackjack: {dealer}")
+
+        result = compare_hands(player, dealer)
+
+        print(f"Final player hand: {player} -> {hand_value(player)[0]}")
+        print(f"Final dealer hand: {dealer} -> {hand_value(dealer)[0]}")
+        print(f"Result: {result}")
+
+        settle_bankroll(tracker, result, bet)
+        tracker.record_snapshot(bet, result)
+        return
+
+    print("Dealer does not have blackjack.")
 
     print("--- BETTING ADVICE ---")
     edge = tracker.estimated_player_edge()
@@ -297,9 +382,6 @@ def play_round(tracker: BlackjackTracker, table_min: float, table_max: float) ->
         print(f"Player hand: {player} -> BLACKJACK")
         print(f"Dealer upcard: {d_up}")
         print("Suggested action: STAY")
-
-        dealer_hole = prompt_card("Dealer hole card: ", tracker)
-        dealer.append(dealer_hole)
 
         result = compare_hands(player, dealer)
         print(f"Dealer hand: {dealer} -> {hand_value(dealer)[0]}")
@@ -342,10 +424,13 @@ def play_round(tracker: BlackjackTracker, table_min: float, table_max: float) ->
 
         print("Please enter H or S.")
 
-    dealer_hole = prompt_card("Dealer hole card: ", tracker)
-    dealer.append(dealer_hole)
+    if dealer_hole is None:
+        dealer_hole = prompt_card("Dealer hole card: ", tracker)
+        dealer.append(dealer_hole)
 
-    while dealer_should_hit(dealer):
+    reveal_hidden_card(tracker, dealer_hole)
+
+    while dealer_should_hit(dealer, hit_soft_17):
         print(f"Dealer hand so far: {dealer} -> {hand_value(dealer)[0]}")
         hit_card = prompt_card("Dealer hit card: ", tracker)
         dealer.append(hit_card)
@@ -404,6 +489,8 @@ def print_progress_table(tracker: BlackjackTracker) -> None:
 
 def main() -> None:
     print("One-Deck Blackjack Simulator with Bet Advice")
+    soft17_choice = input("Should dealer HIT on soft 17? (y/n): ").strip().lower()
+    hit_soft_17 = soft17_choice == "y"
     starting = float(input("Starting bankroll: $").strip())
     table_min = float(input("Table minimum bet: $").strip())
     table_max = float(input("Table maximum bet: $").strip())
@@ -412,7 +499,7 @@ def main() -> None:
 
     while tracker.cards_left() >= MIN_CARDS_TO_START_NEW_ROUND and tracker.bankroll > 0:
         tracker.status()
-        play_round(tracker, table_min, table_max)
+        play_round(tracker, table_min, table_max, hit_soft_17)
 
         if tracker.cards_left() < MIN_CARDS_TO_START_NEW_ROUND:
             print("Not enough cards left to start another round.")
