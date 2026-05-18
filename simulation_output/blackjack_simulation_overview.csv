@@ -1,0 +1,2 @@
+simulations,starting_bankroll,table_min,table_max,dealer_rule,average_final_profit_loss,median_final_profit_loss,average_peak_profit,median_peak_profit,average_lowest_bankroll,average_max_drawdown,winning_sessions,sessions_that_ever_were_positive
+100000,1000.00,50.00,1000.00,H17,-5.27,-50.00,572.47,225.00,510.77,1061.70,44822,82340

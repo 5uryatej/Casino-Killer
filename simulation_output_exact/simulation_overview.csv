@@ -1,0 +1,2 @@
+sessions,starting_bankroll,table_min,table_max,hit_soft_17,avg_final_profit_loss,median_final_profit_loss,avg_peak_profit,median_peak_profit,avg_lowest_bankroll,avg_max_drawdown,max_peak_profit,min_final_profit_loss,percent_positive_final,percent_positive_peak
+100000,1000.0,50.0,1000.0,True,6.42,0.0,582.13,250.0,409.79,804.39,9050.0,-7450.0,47.73,83.3
