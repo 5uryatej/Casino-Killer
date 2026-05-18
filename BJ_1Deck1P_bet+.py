@@ -39,12 +39,23 @@ def card_value(rank: str) -> int:
 
 
 def hand_value(cards: list[str]) -> tuple[int, bool]:
-    total = sum(card_value(c) for c in cards)
-    aces = cards.count("A")
+    total = 0
+    aces = 0
+
+    for c in cards:
+        if c == "A":
+            total += 11
+            aces += 1
+        elif c in {"J", "Q", "K"}:
+            total += 10
+        else:
+            total += int(c)
+
     while total > 21 and aces > 0:
         total -= 10
         aces -= 1
-    soft = "A" in cards and total <= 21 and any(card_value(c) == 11 for c in cards)
+
+    soft = aces > 0
     return total, soft
 
 
