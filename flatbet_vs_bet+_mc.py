@@ -239,6 +239,7 @@ def simulate_one_session(
     hit_soft_17: bool,
     strategy: StrategyName,
     shoe: list[str],
+    path_rows: list[dict[str, object]],
 ) -> SessionResult:
     tracker = ShoeTracker(
         bankroll=starting_bankroll,
@@ -274,6 +275,16 @@ def simulate_one_session(
                 dealer_hole_revealed = True
                 result = compare_hands(player, dealer)
                 tracker.settle_bankroll(result, bet)
+
+                path_rows.append({
+                    "session_no": session_no,
+                    "strategy": strategy,
+                    "step_no": tracker.round_no,
+                    "bankroll_after": tracker.bankroll,
+                    "true_count": round(tracker.true_count(), 2),
+                    "bet": bet,
+                    "starting_bankroll": tracker.starting_bankroll,
+                })
                 continue
 
             # Player blackjack.
@@ -283,6 +294,16 @@ def simulate_one_session(
                 dealer_hole_revealed = True
                 result = compare_hands(player, dealer)
                 tracker.settle_bankroll(result, bet)
+
+                path_rows.append({
+                    "session_no": session_no,
+                    "strategy": strategy,
+                    "step_no": tracker.round_no,
+                    "bankroll_after": tracker.bankroll,
+                    "true_count": round(tracker.true_count(), 2),
+                    "bet": bet,
+                    "starting_bankroll": tracker.starting_bankroll,
+                })
                 continue
 
             # Player turn.
@@ -290,6 +311,16 @@ def simulate_one_session(
                 p_total, _ = hand_value(player)
                 if p_total > 21:
                     tracker.settle_bankroll("PLAYER BUST", bet)
+
+                    path_rows.append({
+                        "session_no": session_no,
+                        "strategy": strategy,
+                        "step_no": tracker.round_no,
+                        "bankroll_after": tracker.bankroll,
+                        "true_count": round(tracker.true_count(), 2),
+                        "bet": bet,
+                        "starting_bankroll": tracker.starting_bankroll,
+                    })
                     break
 
                 action = recommend_action(player, d_up)
@@ -312,6 +343,16 @@ def simulate_one_session(
 
             result = compare_hands(player, dealer)
             tracker.settle_bankroll(result, bet)
+
+            path_rows.append({
+                "session_no": session_no,
+                "strategy": strategy,
+                "step_no": tracker.round_no,
+                "bankroll_after": tracker.bankroll,
+                "true_count": round(tracker.true_count(), 2),
+                "bet": bet,
+                "starting_bankroll": tracker.starting_bankroll,
+            })
 
         except ShoeExhausted:
             break
@@ -356,6 +397,7 @@ def main() -> None:
 
     session_rows: list[dict[str, object]] = []
     paired_rows: list[dict[str, object]] = []
+    path_rows: list[dict[str, object]] = []
 
     flat_results: list[SessionResult] = []
     ramp_results: list[SessionResult] = []
@@ -370,6 +412,7 @@ def main() -> None:
             hit_soft_17=hit_soft_17,
             strategy="flat",
             shoe=shoe,
+            path_rows=path_rows
         )
         ramp = simulate_one_session(
             session_no=session_no,
@@ -378,6 +421,7 @@ def main() -> None:
             hit_soft_17=hit_soft_17,
             strategy="betramp",
             shoe=shoe,
+            path_rows=path_rows
         )
 
         flat_results.append(flat)
@@ -457,6 +501,7 @@ def main() -> None:
     export_csv(session_rows, out_dir / "session_comparison.csv")
     export_csv(paired_rows, out_dir / "paired_session_winner.csv")
     export_csv(overview, out_dir / "overview.csv")
+    export_csv(path_rows, out_dir / "session_paths.csv")
 
     print("\n--- SUMMARY ---")
     print(f"Flat avg final P/L: ${overview[0]['flat_avg_final_profit_loss']:.2f}")
